@@ -8,6 +8,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import json
 
+# a modern path manipulation module, replacing os.path
 from pathlib import Path
 
 # timm: PyTorch Image Models
@@ -348,7 +349,7 @@ def get_args_parser():
     )
 
     parser.add_argument(
-        "--output_dir", default="", help="path where to save, empty for no saving"
+        "--output-dir", default="", help="path where to save, empty for no saving"
     )
     parser.add_argument(
         "--device", default="cuda", help="device to use for training / testing"
@@ -356,7 +357,7 @@ def get_args_parser():
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--resume", default="", help="resume from checkpoint")
     parser.add_argument(
-        "--start_epoch", default=0, type=int, metavar="N", help="start epoch"
+        "--start-epoch", default=0, type=int, metavar="N", help="start epoch"
     )
     parser.add_argument("--eval", action="store_true", help="Perform evaluation only")
     parser.add_argument(
@@ -509,7 +510,10 @@ def main(args):
                 del checkpoint_model[k]
 
         # interpolate position embedding
-        pos_embed_checkpoint = checkpoint_model["pos_embed"]
+        # make the position embedding fit with the new model
+        pos_embed_checkpoint = checkpoint_model[
+            "pos_embed"
+        ]  # extracts the positional embedding
         embedding_size = pos_embed_checkpoint.shape[
             -1
         ]  # the dimension of position embedding
@@ -528,10 +532,13 @@ def main(args):
         pos_tokens = pos_tokens.reshape(
             -1, orig_size, orig_size, embedding_size
         ).permute(0, 3, 1, 2)
+        # resize the positional embeddings to match the new size
         pos_tokens = torch.nn.functional.interpolate(
             pos_tokens, size=(new_size, new_size), mode="bicubic", align_corners=False
         )
-        pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
+        pos_tokens = pos_tokens.permute(0, 2, 3, 1).flatten(
+            1, 2
+        )  # flatten merges dimension 1 and 2 into one dimension
         new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
         checkpoint_model["pos_embed"] = new_pos_embed
 
@@ -539,6 +546,7 @@ def main(args):
 
     model.to(device)
 
+    # EMA: Exponential Moving Average
     model_ema = None
     """if args.model_ema:
         # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
@@ -548,12 +556,14 @@ def main(args):
             device='cpu' if args.model_ema_force_cpu else '',
             resume='')"""
 
-    model_without_ddp = model
+    model_without_ddp = model  # DDP: Distributed Data Parallel
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[args.gpu], find_unused_parameters=True
         )
-        model_without_ddp = model.module
+        model_without_ddp = (
+            model.module
+        )  # model is the DDP wrapper, module is the actual model
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("number of params:", n_parameters)
 
@@ -577,10 +587,14 @@ def main(args):
             {'params' : weight_parameters, 'lr' : args.lr }],
             lr=args.lr, weight_decay=args.weight_decay)"""
 
-    loss_scaler = NativeScaler()
+    loss_scaler = NativeScaler()  # a utility for mixed precision training
 
-    lr_scheduler, _ = create_scheduler(args, optimizer)
+    lr_scheduler, _ = create_scheduler(
+        args, optimizer
+    )  # scheduler adjusts the learning rate dynamically
 
+    # Label Smoothing: assigns a slightly lower probability to the correct class, vice versa
+    # prevents the model from over confident
     criterion = LabelSmoothingCrossEntropy()
 
     if mixup_active:
@@ -624,6 +638,7 @@ def main(args):
     )
 
     output_dir = Path(args.output_dir)
+
     if args.resume:
         if args.resume.startswith("https"):
             checkpoint = torch.hub.load_state_dict_from_url(
@@ -646,6 +661,7 @@ def main(args):
             if "scaler" in checkpoint:
                 loss_scaler.load_state_dict(checkpoint["scaler"])
         lr_scheduler.step(args.start_epoch)
+
     if args.eval:
         test_stats = evaluate(data_loader_val, model, device)
         print(
@@ -680,7 +696,9 @@ def main(args):
 
         lr_scheduler.step(epoch)
         if args.output_dir:
-            checkpoint_paths = [output_dir / "checkpoint.pth"]
+            checkpoint_paths = [
+                output_dir / "checkpoint.pth"
+            ]  # operator "/" is overloaded to create paths
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master(
                     {

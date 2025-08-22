@@ -8,6 +8,9 @@ Mostly copy-paste from torchvision references.
 import io
 import os
 import time
+
+# defaultdict: provides default values for missing keys
+# deque: double-ended queue
 from collections import defaultdict, deque
 import datetime
 
@@ -36,6 +39,7 @@ class SmoothedValue(object):
 
     def synchronize_between_processes(self):
         """
+        Synchronizes the statistics across distributed processes.
         Warning: does not synchronize the deque!
         """
         if not is_dist_avail_and_initialized():
@@ -47,6 +51,7 @@ class SmoothedValue(object):
         self.count = int(t[0])
         self.total = t[1]
 
+    # @property defines a method as a property, allowing it to be accessed like an attribute
     @property
     def median(self):
         d = torch.tensor(list(self.deque))
@@ -80,21 +85,29 @@ class SmoothedValue(object):
 
 
 class MetricLogger(object):
+    """
+    A utility to track, log and display metrics.
+    Contains loss, accuracy, time...
+    """
+
     def __init__(self, delimiter="\t"):
-        self.meters = defaultdict(SmoothedValue)
+        self.meters = defaultdict(
+            SmoothedValue
+        )  # make SmoothedValue to be the default factory
         self.delimiter = delimiter
 
     def update(self, **kwargs):
-        for k, v in kwargs.items():
-            if isinstance(v, torch.Tensor):
-                v = v.item()
+        for k, v in kwargs.items():  # items() retrieves key-value pairs
+            if isinstance(v, torch.Tensor):  # checks if v is torch.Tensor
+                v = v.item()  # extracts a scalar value from single-element tensor
             assert isinstance(v, (float, int))
             self.meters[k].update(v)
 
+    # if an attribute doesn't exist, __getattr__ is called
     def __getattr__(self, attr):
         if attr in self.meters:
             return self.meters[attr]
-        if attr in self.__dict__:
+        if attr in self.__dict__:  # __dict__ stores explicitly defined attributes
             return self.__dict__[attr]
         raise AttributeError(
             "'{}' object has no attribute '{}'".format(type(self).__name__, attr)
@@ -113,6 +126,7 @@ class MetricLogger(object):
     def add_meter(self, name, meter):
         self.meters[name] = meter
 
+    # a generator function, producing a sequence of values lazily (one at a time)
     def log_every(self, iterable, print_freq, header=None):
         i = 0
         if not header:
@@ -236,7 +250,9 @@ def is_main_process():
 
 def save_on_master(*args, **kwargs):
     if is_main_process():
-        torch.save(*args, **kwargs)
+        torch.save(
+            *args, **kwargs
+        )  # serializes the object; * and ** unpack the sequence and dictionary here
 
 
 def init_distributed_mode(args):

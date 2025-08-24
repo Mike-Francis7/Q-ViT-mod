@@ -478,7 +478,7 @@ def main(args):
 
     model = create_model(
         args.model,
-        pretrained=False,
+        pretrained=False,  # False indicates that the model is initialized with random weights
         num_classes=args.nb_classes,
         drop_rate=args.drop,
         drop_path_rate=args.drop_path,

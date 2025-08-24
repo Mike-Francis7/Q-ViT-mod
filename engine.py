@@ -75,7 +75,7 @@ def train_one_epoch(
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
-@torch.no_grad()
+@torch.no_grad()  # all operations within the function won't track gradients
 def evaluate(data_loader, model, device):
     criterion = torch.nn.CrossEntropyLoss()
 
